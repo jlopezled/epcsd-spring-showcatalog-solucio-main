@@ -1,40 +1,65 @@
 package edu.uoc.epcsd.showcatalog;
 
+import com.fasterxml.jackson.core.type.TypeReference;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import edu.uoc.epcsd.showcatalog.application.rest.CatalogRESTController;
 import edu.uoc.epcsd.showcatalog.domain.Category;
+import edu.uoc.epcsd.showcatalog.domain.Show;
 import edu.uoc.epcsd.showcatalog.domain.repository.CategoryRepository;
+import edu.uoc.epcsd.showcatalog.domain.repository.ShowRepository;
 import edu.uoc.epcsd.showcatalog.domain.service.CatalogService;
 import edu.uoc.epcsd.showcatalog.domain.service.CatalogServiceImpl;
-import org.junit.jupiter.api.BeforeAll;
-import org.junit.jupiter.api.BeforeEach;
-import org.junit.jupiter.api.Test;
-import org.junit.jupiter.api.extension.ExtendWith;
-import org.mockito.Mock;
-import org.mockito.junit.jupiter.MockitoExtension;
-import org.springframework.http.HttpStatus;
-import org.springframework.web.bind.annotation.GetMapping;
-import org.springframework.web.bind.annotation.ResponseStatus;
 
-import javax.xml.catalog.Catalog;
+import org.junit.Before;
+import org.junit.Test;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.runner.RunWith;
+import org.mockito.Mock;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
+import org.springframework.boot.test.autoconfigure.web.servlet.WebMvcTest;
+import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.boot.test.context.TestConfiguration;
+import org.springframework.boot.test.mock.mockito.MockBean;
+import org.springframework.context.annotation.Bean;
+import org.springframework.http.MediaType;
+import org.springframework.kafka.core.KafkaTemplate;
+import org.springframework.test.context.junit4.SpringRunner;
+import org.springframework.test.web.servlet.MockMvc;
+import org.springframework.test.web.servlet.MvcResult;
+
 import java.util.Arrays;
 import java.util.List;
-import java.util.Optional;
 
-import static org.junit.jupiter.api.Assertions.*;
-import static org.mockito.Mockito.when;
+import static org.hamcrest.Matchers.hasSize;
+import static org.junit.jupiter.api.Assertions.assertAll;
+import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.mockito.BDDMockito.given;
+import static org.mockito.Mockito.*;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.*;
 
-@ExtendWith(MockitoExtension.class)
+@RunWith(SpringRunner.class)
+@WebMvcTest(CatalogRESTController.class)
 public class CatalogControllerUnitTest {
 
-    @Mock
+
+    @MockBean
     private static CatalogService catalogService;
 
-    private static CatalogRESTController sut;
+    @Autowired
+    private MockMvc mvc;
+
+
+    private static CatalogRESTController catalogRESTController;
 
     private static List<Category> list;
 
-    @BeforeAll
-    static void setUpI() {
+    @Before
+    public void setUp() {
+
+        catalogRESTController = new CatalogRESTController(catalogService);
+
         Category category1 = Category.builder()
                 .id(1L)
                 .name("Category 1")
@@ -47,22 +72,28 @@ public class CatalogControllerUnitTest {
 
     }
 
-    @BeforeEach
-    void dependenciesInjection() {
-        sut = new CatalogRESTController(catalogService);
-    }
-
     @Test
-    void testFindAllCategories() {
+    public void testFindAllCategories() throws Exception {
 
-        when(catalogService.findAllCategories()).thenReturn(list);
+        given(catalogService.findAllCategories()).willReturn(list);
 
-        List<Category> checkList = sut.findCategories();
+        MvcResult result = this.mvc.perform(get("/categories"))
+                .andExpect(status().isOk())
+                .andExpect(content().contentType(MediaType.APPLICATION_JSON))
+                .andExpect(jsonPath("$", hasSize(2)))
+                .andReturn();
 
-        assertAll("Compares two lists of categories",
-                () -> assertEquals(checkList.size(), list.size()),
-                () -> assertTrue(checkList.containsAll(list)),
-                () -> assertTrue(list.containsAll(checkList)));
+        ObjectMapper mapper = new ObjectMapper();
+        List<Category> actual = mapper.readValue(result.getResponse().getContentAsString(), new TypeReference<List<Category>>() {
+        });
+
+        assertAll("Check that the result is the same as expected",
+                () -> assertTrue(actual.containsAll(list)),
+                () -> assertTrue(list.containsAll(actual)));
+
+
+        verify(catalogService, times(1)).findAllCategories();
+
 
     }
 
